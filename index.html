@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Smart Door Workflow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600&family=Sarabun:wght@300;400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-v="a">
+<div class="wrap">
+  <header>
+    <div><div class="tag">Smart Home · Door Workflow</div><h1>ประตูอัจฉริยะ: อนิเมชันตามขั้นตอนการทำงาน</h1></div>
+    <div class="sw" id="sw">
+      <button data-v="a" aria-pressed="true">ทไวไลท์</button>
+      <button data-v="b" aria-pressed="false">เช้าสดใส</button>
+      <button data-v="c" aria-pressed="false">มิดไนท์นีออน</button>
+    </div>
+  </header>
+
+  <div class="steps" id="steps">
+    <div class="st on" data-s="1"><b>1 · Standby</b><small>ประตูปิด 0° · ไฟดับ</small></div>
+    <div class="st" data-s="2"><b>2 · Trigger &amp; Open</b><small>เสียงต้อนรับ · ไฟติด · ประตูเปิด 90°</small></div>
+    <div class="st" data-s="3"><b>3 · Close &amp; Reset</b><small>ปิดประตู · Thank You · กลับ Standby</small></div>
+  </div>
+
+  <div class="card">
+    <div class="stage" id="stage">
+      <div class="moon"></div><div class="wall"></div><div class="roof"></div><div class="ground"></div>
+      <div class="frame"><div class="inner"><div class="inside"></div><div class="door" id="door"></div></div></div>
+      <div class="lamp"></div>
+      <button class="pir" id="pir" aria-label="PIR Motion Sensor: คลิกเพื่อจำลองคนเดินมา"></button>
+      <div class="tip">คลิก PIR</div>
+    </div>
+    <div class="oled" id="oled"><div class="l1">Smart Door</div><div class="l2">Standby...</div></div>
+    <div class="tiles">
+      <div class="t" id="tPir"><span>🚶 PIR Sensor</span><b>Idle</b></div>
+      <div class="t" id="tLed"><span>💡 LED หน้าประตู</span><b>OFF</b></div>
+      <div class="t" id="tSnd"><span>🔔 Chime</span><b>Silent</b></div>
+      <div class="t" id="tDoor"><span>🚪 Door (Servo)</span><b>CLOSED · 0°</b><div class="track"><div class="fill" id="fill"></div></div></div>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
