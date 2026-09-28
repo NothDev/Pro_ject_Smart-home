@@ -3,6 +3,7 @@ function tile(id,txt,on){var e=$(id);e.className='t'+(on?' on':'');e.querySelect
 function log(m){var d=document.createElement('div');d.innerHTML='<time>'+new Date().toLocaleTimeString('th-TH')+'</time>'+m;$('log').prepend(d);while($('log').children.length>25)$('log').lastChild.remove()}
 function oled(a,b){$('oled').innerHTML='<div class="l1">'+a+'</div><div class="l2">'+b+'</div>'}
 function step(n){document.querySelectorAll('.st').forEach(function(s){s.classList.toggle('on',+s.dataset.s===n)})}
+
 function chime(){
   try{
     ctx=ctx||new(window.AudioContext||window.webkitAudioContext)();
@@ -15,6 +16,7 @@ function chime(){
   }catch(e){}
   tile('tSnd','Playing…',true);setTimeout(function(){tile('tSnd','Silent')},1200);
 }
+
 function swing(from,to,cb){
   var t0=performance.now();
   (function f(t){
@@ -24,29 +26,99 @@ function swing(from,to,cb){
     p<1?requestAnimationFrame(f):cb&&cb();
   })(t0);
 }
-function trigger(){
-  if(busy)return;busy=true;
-  var st=$('stage');st.classList.add('busy','lit','opened');
-  step(2);tile('tPir','Motion!',true);tile('tLed','ON',true);
-  chime();oled('Welcome!','Please come in');
-  log('PIR ทริก → เล่นเสียงต้อนรับ + LED ติด + ประตูเริ่มเปิด');
-  swing(0,90,function(){
-    log('ประตูเปิดสุด 90° → เปิดค้าง 4 วินาที');
-    var f=$('fill');f.style.transition='none';f.style.width='100%';void f.offsetWidth;f.style.transition='width '+HOLD+'ms linear';f.style.width='0%';
-    tile('tPir','Idle');
-    setTimeout(function(){
-      step(3);st.classList.remove('opened');oled('Thank You','See you again');
-      log('ครบเวลา → ประตูเริ่มปิดกลับ 0° · OLED: Thank You');
-      swing(90,0,function(){
-        setTimeout(function(){
-          st.classList.remove('lit','busy');tile('tLed','OFF');step(1);
-          oled('Smart Door','Standby...');busy=false;
-          log('LED ดับ · รีเซ็ตกลับสู่ Standby รอการทริกครั้งถัดไป');
-        },1500);
-      });
-    },HOLD);
-  });
+
+// ฟังก์ชันหลักรับเหตุการณ์จาก ESP32 ผ่าน MQTT (รองรับ JSON)
+function handleCloudEvent(eventData) {
+  var st=$('stage');
+  var eventType = eventData.event;
+  var count = eventData.count || 0;
+
+  if(eventType === 'OPEN') {
+    if(busy) return;
+    busy = true;
+    st.classList.add('busy','lit','opened');
+    step(2);
+    tile('tPir','Motion!',true);
+    tile('tLed','ON',true);
+    chime();
+    oled('Welcome!', 'Customer #' + count);
+    log('MQTT [OPEN] → ลูกค้าคนที่ #' + count + ' เข้าร้าน');
+    
+    swing(0, 90, function(){
+      var f=$('fill');
+      f.style.transition='none';
+      f.style.width='100%';
+      void f.offsetWidth;
+      f.style.transition='width '+HOLD+'ms linear';
+      f.style.width='0%';
+      tile('tPir','Idle');
+    });
+    
+  } else if(eventType === 'CLOSED') {
+    step(3);
+    st.classList.remove('opened');
+    oled('Thank You', 'Total: ' + count + ' cust');
+    log('MQTT [CLOSED] → ปิดประตูเรียบร้อย');
+    
+    swing(90, 0, function(){
+      setTimeout(function(){
+        st.classList.remove('lit','busy');
+        tile('tLed','OFF');
+        step(1);
+        oled('Smart Door','Standby...');
+        busy = false;
+      }, 1500);
+    });
+  } else if(eventType === 'OFFLINE') {
+    log('⚠️ เตือน: ฮาร์ดแวร์ ESP32 ออฟไลน์ (Last Will Triggered)');
+    oled('Device Offline', 'Check Connection');
+  }
 }
-$('pir').addEventListener('click',trigger);
-$('sw').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;document.body.dataset.v=b.dataset.v;this.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b)})});
-log('ระบบพร้อม · สถานะ Standby');
+
+// --- เชื่อมต่อ MQTT.js ผ่าน WebSocket (พอร์ต 8884) ---
+const MQTT_HOST = 'wss://61286afe29624375903af5c7efec2060.s1.eu.hivemq.cloud:8884/mqtt';
+const MQTT_OPTIONS = {
+    clientId: 'web_dashboard_' + Math.random().toString(16).substring(2, 8),
+    username: 'esp32_door', 
+    password: 'รหัสผ่านของคุณ', // <--- ใส่ Password ของคุณ
+    clean: true,
+};
+
+const client = mqtt.connect(MQTT_HOST, MQTT_OPTIONS);
+
+client.on('connect', () => {
+    log('เชื่อมต่อ HiveMQ Cloud สำเร็จผ่าน WebSocket!');
+    client.subscribe('smart_home/door/status', (err) => {
+        if (!err) log('ติดตาม Topic สถานะสำเร็จ');
+    });
+});
+
+client.on('message', (topic, payload) => {
+    try {
+        const data = JSON.parse(payload.toString());
+        handleCloudEvent(data);
+    } catch(e) {
+        log('รับข้อความดิบ: ' + payload.toString());
+    }
+});
+
+// ฟังก์ชันส่งคำสั่งควบคุมโหมดจากหน้าเว็บกลับไปหา ESP32 (Two-way control)
+function sendCommand(modeName) {
+    client.publish('smart_home/door/cmd', modeName, (err) => {
+        if (!err) {
+            log('📤 ส่งคำสั่งสำเร็จ: Mode -> ' + modeName);
+        } else {
+            log('❌ ส่งคำสั่งไม่สำเร็จ');
+        }
+    });
+}
+
+// ผูกปุ่มจำลองบนหน้าเว็บแบบเดิม
+$('pir').addEventListener('click', function(){
+    handleCloudEvent({ event: 'OPEN', count: 99 });
+    setTimeout(function(){
+        handleCloudEvent({ event: 'CLOSED', count: 99 });
+    }, HOLD + 1500);
+});
+
+log('ระบบเว็บพร้อม · รอรับข้อมูลจากฮาร์ดแวร์');
