@@ -2,47 +2,173 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Smart Door Workflow</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600&family=Sarabun:wght@300;400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart 7-11 Door Simulator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-v="a">
-<div class="wrap">
-  <header>
-    <div><div class="tag">Smart Home · Door Workflow</div><h1>ประตูอัจฉริยะ: อนิเมชันตามขั้นตอนการทำงาน</h1></div>
-    <div class="sw" id="sw">
-      <button data-v="a" aria-pressed="true">ทไวไลท์</button>
-      <button data-v="b" aria-pressed="false">เช้าสดใส</button>
-      <button data-v="c" aria-pressed="false">มิดไนท์นีออน</button>
-    </div>
-  </header>
+<body class="min-h-screen p-4 md:p-6">
+<div class="max-w-7xl mx-auto space-y-6">
 
-  <div class="steps" id="steps">
-    <div class="st on" data-s="1"><b>1 · Standby</b><small>ประตูปิด 0° · ไฟดับ</small></div>
-    <div class="st" data-s="2"><b>2 · Trigger &amp; Open</b><small>เสียงต้อนรับ · ไฟติด · ประตูเปิด 90°</small></div>
-    <div class="st" data-s="3"><b>3 · Close &amp; Reset</b><small>ปิดประตู · Thank You · กลับ Standby</small></div>
+<header class="flex flex-col md:flex-row justify-between items-center gap-3 bg-[#131b2e] p-5 rounded-2xl border border-slate-800">
+  <div class="flex items-center gap-4">
+    <div class="w-16 h-16 bg-white rounded-xl flex flex-col items-center justify-center border-2 border-green-700 leading-none">
+      <b class="text-red-600 text-3xl italic">7</b><span class="text-green-700 text-[9px] font-black tracking-wider">ELEVEN</span>
+    </div>
+    <div>
+      <h1 class="text-2xl font-bold text-amber-400">Smart 7-11 Door Simulator</h1>
+      <p class="text-xs text-slate-400">จำลองประตูอัตโนมัติหน้าร้านสะดวกซื้อ พร้อมโหมดกลางวัน/กลางคืน</p>
+    </div>
+  </div>
+  <div class="px-4 py-2 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-2">
+    <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>พร้อมทดสอบระบบ
+  </div>
+</header>
+
+<div class="grid grid-cols-1 xl:grid-cols-4 gap-6">
+<div class="xl:col-span-3 space-y-6">
+
+  <div class="card p-5">
+    <div class="flex justify-between items-center mb-3 text-xs">
+      <span class="text-slate-400">มุมมองหน้าร้าน</span>
+      <span id="mode-badge" class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">MODE: AUTO</span>
+    </div>
+
+    <div id="scene" class="scene">
+      <div class="sky-night"></div><div class="stars"></div>
+      <div class="orb sun"></div><div class="orb moon"></div>
+      <div class="cloud" style="top:40px;animation-delay:-10s"></div>
+      <div class="cloud" style="top:85px;animation-delay:-30s;width:70px"></div>
+      <div id="dn-badge" class="badge-dn">☀️ กลางวัน</div>
+
+      <div class="bldg">
+        <div class="roof"></div>
+        <div class="signrow">
+          <div class="sb"><i class="o"></i><i class="g"></i><i class="r"></i></div>
+          <div class="sb"><i class="o"></i><i class="g"></i><i class="r"></i></div>
+          <div class="sb"><i class="o"></i><i class="g"></i><i class="r"></i></div>
+          <div class="logo"><b>7</b><span>ELEVEN</span></div>
+          <div class="sb"><i class="o"></i><i class="g"></i><i class="r"></i></div>
+          <div class="sb"><i class="o"></i><i class="g"></i><i class="r"></i></div>
+          <div class="sb"><i class="o"></i><i class="g"></i><i class="r"></i></div>
+        </div>
+        <div class="front">
+          <svg id="inside" viewBox="0 0 800 220" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+<defs>
+<linearGradient id="wl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f8fafc"/><stop offset="1" stop-color="#e2e8f0"/></linearGradient>
+<linearGradient id="fl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c3cbd3"/><stop offset="1" stop-color="#eef1f4"/></linearGradient>
+<pattern id="cool" width="66" height="106" patternUnits="userSpaceOnUse">
+<rect width="66" height="106" fill="#1e293b"/><rect x="2" y="2" width="62" height="102" fill="#e0f2fe"/>
+<g stroke-width="17"><line x1="4" y1="17" x2="62" y2="17" stroke="#3b82f6" stroke-dasharray="7 4 6 4"/><line x1="4" y1="45" x2="62" y2="45" stroke="#ef4444" stroke-dasharray="6 3 8 5"/><line x1="4" y1="73" x2="62" y2="73" stroke="#22c55e" stroke-dasharray="8 4 5 4"/><line x1="4" y1="97" x2="62" y2="97" stroke="#f59e0b" stroke-dasharray="10 4"/></g>
+<g fill="#94a3b8"><rect x="2" y="27" width="62" height="2"/><rect x="2" y="55" width="62" height="2"/><rect x="2" y="83" width="62" height="2"/></g>
+<rect x="58" y="30" width="2.5" height="46" rx="1" fill="#64748b"/><path d="M2 2h30L6 104H2z" fill="#fff" opacity=".28"/>
+</pattern>
+</defs>
+<rect width="800" height="180" fill="url(#wl)"/>
+<rect width="800" height="24" fill="#e2e8f0"/><rect y="24" width="800" height="3" fill="#cbd5e1"/>
+<g class="tube"><rect x="30" y="8" width="110" height="8" rx="4"/><rect x="190" y="8" width="110" height="8" rx="4"/><rect x="350" y="8" width="110" height="8" rx="4"/><rect x="510" y="8" width="110" height="8" rx="4"/><rect x="670" y="8" width="110" height="8" rx="4"/></g>
+<rect y="33" width="800" height="4" fill="#f97316"/><rect y="38" width="800" height="4" fill="#15803d"/><rect y="43" width="800" height="4" fill="#dc2626"/>
+<rect y="60" width="800" height="6" fill="#15803d"/>
+<rect y="66" width="800" height="106" fill="url(#cool)"/>
+<rect y="168" width="800" height="5" fill="#64748b"/>
+<rect y="173" width="800" height="47" fill="url(#fl)"/>
+<path d="M0 194H800M0 210H800M400 173L-200 220M400 173L0 220M400 173L200 220M400 173L400 220M400 173L600 220M400 173L800 220M400 173L1000 220" stroke="#aab3bd" stroke-width=".8" fill="none"/>
+<ellipse cx="400" cy="196" rx="150" ry="13" fill="#fff" opacity=".45"/>
+<g font-size="11" font-weight="700" fill="#fff" text-anchor="middle">
+<path d="M110 27V66M150 27V66" stroke="#64748b"/><rect x="80" y="66" width="100" height="20" rx="3" fill="#f97316"/><text x="130" y="80">ขนมขบเคี้ยว</text>
+<path d="M370 27V52M430 27V52" stroke="#64748b"/><rect x="350" y="52" width="100" height="20" rx="3" fill="#15803d"/><text x="400" y="66">เครื่องดื่มเย็น</text>
+<path d="M640 27V52M700 27V52" stroke="#64748b"/><rect x="620" y="52" width="100" height="20" rx="3" fill="#dc2626"/><text x="670" y="66">อาหารร้อน</text></g>
+<rect x="40" y="96" width="190" height="76" fill="#f8fafc" stroke="#94a3b8" stroke-width="3"/>
+<g stroke-width="18"><line x1="46" y1="107" x2="224" y2="107" stroke="#f59e0b" stroke-dasharray="16 5 12 6"/><line x1="46" y1="133" x2="224" y2="133" stroke="#22c55e" stroke-dasharray="14 7 18 5"/><line x1="46" y1="160" x2="224" y2="160" stroke="#3b82f6" stroke-dasharray="18 5 10 5"/><line x1="46" y1="107" x2="224" y2="107" stroke="#ef4444" stroke-dasharray="5 41" stroke-dashoffset="-20"/><line x1="46" y1="133" x2="224" y2="133" stroke="#fde047" stroke-dasharray="6 38" stroke-dashoffset="-12"/></g>
+<g fill="#94a3b8"><rect x="40" y="117" width="190" height="3"/><rect x="40" y="143" width="190" height="3"/></g>
+<rect x="640" y="70" width="140" height="44" fill="#1e293b"/>
+<g stroke-width="12"><line x1="646" y1="80" x2="774" y2="80" stroke="#ef4444" stroke-dasharray="5 3 8 3"/><line x1="646" y1="102" x2="774" y2="102" stroke="#f59e0b" stroke-dasharray="7 3 4 3"/></g>
+<circle cx="690" cy="88" r="10" fill="#f1c9a5"/><path d="M679 86c0-10 22-10 22 0-6-4-16-4-22 0z" fill="#1f2937"/>
+<rect x="676" y="98" width="28" height="30" rx="8" fill="#15803d"/><rect x="676" y="110" width="28" height="4" fill="#f97316"/>
+<rect x="560" y="122" width="210" height="50" fill="#f8fafc" stroke="#cbd5e1"/><rect x="554" y="116" width="222" height="8" fill="#15803d"/>
+<rect x="560" y="142" width="210" height="4" fill="#f97316"/><rect x="560" y="149" width="210" height="4" fill="#dc2626"/>
+<rect x="600" y="98" width="36" height="18" rx="2" fill="#334155"/><rect x="606" y="102" width="24" height="9" fill="#38bdf8"/>
+<rect x="722" y="100" width="42" height="16" rx="3" fill="#fbbf24" stroke="#b45309"/><rect x="726" y="103" width="34" height="8" fill="#fef3c7"/>
+</svg>
+  <div class="win"><div class="glow-in"></div><div class="tint"></div><div class="wband"><span>7-ELEVEN</span><span>7-ELEVEN</span></div><div class="reflect"></div></div>
+          
+          <div class="doorbox" id="door">
+            <div id="insider" class="ppl"></div>
+            <div class="glow-in"></div><div class="tint"></div>
+            <div id="led"></div>
+            
+            <div id="dl" class="panel">
+              <span>◀ OPEN</span>
+              <div class="band"><span>7-ELEVEN</span><span>★</span></div>
+            </div>
+            
+            <div id="dr" class="panel">
+              <span>OPEN ▶</span>
+              <div class="band"><span>7-ELEVEN</span></div>
+            </div>
+
+            <div class="reflect"></div>
+          </div>
+
+          <div class="win"><div class="glow-in"></div><div class="tint"></div><div class="wband"><span>7-ELEVEN</span><span>7-ELEVEN</span></div><div class="reflect"></div></div>
+        </div>
+      </div>
+
+      <div class="ground"></div>
+      <div class="spill"></div>
+      <div id="person" class="ppl"></div>
+    </div>
+
+    <div class="w-full max-w-sm mx-auto bg-slate-900 h-2.5 rounded-full mt-4 overflow-hidden border border-slate-800">
+      <div id="fill" class="bg-amber-400 h-full w-0 shadow-[0_0_8px_#fbbf24]"></div>
+    </div>
+    <div class="mt-5 text-center">
+      <button onclick="triggerMotion()" class="py-3.5 px-8 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-2xl shadow-lg active:scale-95 transition">
+        🚶 จำลองคนเดินผ่านเซนเซอร์ (PIR Trigger)
+      </button>
+    </div>
   </div>
 
-  <div class="card">
-    <div class="stage" id="stage">
-      <div class="moon"></div><div class="wall"></div><div class="roof"></div><div class="ground"></div>
-      <div class="frame"><div class="inner"><div class="inside"></div><div class="door" id="door"></div></div></div>
-      <div class="lamp"></div>
-      <button class="pir" id="pir" aria-label="PIR Motion Sensor: คลิกเพื่อจำลองคนเดินมา"></button>
-      <div class="tip">คลิก PIR</div>
+  <div class="card p-5">
+    <h2 class="text-base font-semibold mb-4">🎛️ โหมดการทำงานของประตู</h2>
+    <div class="grid grid-cols-3 gap-3">
+      <button id="b-AUTO" onclick="setMode('AUTO')" class="btn bg-emerald-700 hover:bg-emerald-600 text-emerald-50 border-emerald-500">🟢 AUTO</button>
+      <button id="b-HOLD_OPEN" onclick="setMode('HOLD_OPEN')" class="btn bg-amber-700 hover:bg-amber-600 text-amber-50 border-amber-500">🔓 HOLD OPEN</button>
+      <button id="b-LOCKED" onclick="setMode('LOCKED')" class="btn bg-rose-800 hover:bg-rose-700 text-rose-50 border-rose-600">🔒 LOCKED</button>
     </div>
-    <div class="oled" id="oled"><div class="l1">Smart Door</div><div class="l2">Standby...</div></div>
-    <div class="tiles">
-      <div class="t" id="tPir"><span>🚶 PIR Sensor</span><b>Idle</b></div>
-      <div class="t" id="tLed"><span>💡 LED หน้าประตู</span><b>OFF</b></div>
-      <div class="t" id="tSnd"><span>🔔 Chime</span><b>Silent</b></div>
-      <div class="t" id="tDoor"><span>🚪 Door (Servo)</span><b>CLOSED · 0°</b><div class="track"><div class="fill" id="fill"></div></div></div>
-    </div>
-    <div class="log" id="log"></div>
   </div>
+</div>
+
+<div class="space-y-6">
+  <div class="oled p-4">
+    <div class="text-[10px] text-slate-500 flex justify-between"><span>OLED 1602</span><span class="text-emerald-400">● LIVE</span></div>
+    <div id="oled" class="text-center py-3"><div class="m text-2xl font-bold tracking-wider">Smart Door</div><div class="s text-lg mt-1">Standby...</div></div>
+  </div>
+
+  <div class="grid grid-cols-2 gap-4">
+    <div class="card p-4 text-center"><div class="text-[11px] text-slate-400">ลูกค้าวันนี้</div><div id="cnt" class="text-4xl font-bold text-amber-400">0</div></div>
+    <div class="card p-4 text-center"><div class="text-[11px] text-slate-400">ความสว่าง (%)</div><div id="ldr" class="text-4xl font-bold text-sky-400">0%</div></div>
+  </div>
+
+  <div class="card p-5 space-y-3">
+    <div class="flex justify-between text-xs"><span class="text-slate-400">แสงแวดล้อม (LDR)</span><span id="ldr-label" class="text-sky-400 font-bold"></span></div>
+    <div class="grid grid-cols-3 gap-2">
+      <button id="b-day" onclick="onSliderInput(4095)" class="btn !py-2 !text-xs bg-sky-900 border-sky-600 text-sky-100">☀️ กลางวัน</button>
+      <button id="b-night" onclick="onSliderInput(0)" class="btn !py-2 !text-xs bg-indigo-950 border-indigo-600 text-indigo-100">🌙 กลางคืน</button>
+      <button id="b-cycle" onclick="toggleCycle()" class="btn !py-2 !text-xs bg-slate-800 border-slate-600 text-slate-100">🔄 วนอัตโนมัติ</button>
+    </div>
+    <input type="range" id="slider" min="0" max="4095" value="500" oninput="onSliderInput(this.value)">
+    <p class="text-[10px] text-slate-500">ค่าสไลเดอร์: ซ้าย = มืด (0%), ขวา = สว่าง (100%)</p>
+  </div>
+
+  <div class="card p-5 flex flex-col h-60">
+    <h2 class="text-xs font-semibold mb-2 flex justify-between"><span>📜 SIMULATION LOG</span><button onclick="log_.innerHTML=''" class="text-[10px] text-slate-500 hover:text-rose-400">ล้างล็อก</button></h2>
+    <div id="log" class="bg-black/80 rounded-xl h-full overflow-y-auto font-mono text-[11px] space-y-1 border border-slate-900 p-2.5"></div>
+  </div>
+</div>
+</div>
 </div>
 
 <script src="script.js"></script>
