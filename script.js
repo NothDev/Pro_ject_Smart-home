@@ -1,52 +1,210 @@
-var $=function(i){return document.getElementById(i)},HOLD=4000,MOVE=1400,busy=false,ctx;
-function tile(id,txt,on){var e=$(id);e.className='t'+(on?' on':'');e.querySelector('b').textContent=txt}
-function log(m){var d=document.createElement('div');d.innerHTML='<time>'+new Date().toLocaleTimeString('th-TH')+'</time>'+m;$('log').prepend(d);while($('log').children.length>25)$('log').lastChild.remove()}
-function oled(a,b){$('oled').innerHTML='<div class="l1">'+a+'</div><div class="l2">'+b+'</div>'}
-function step(n){document.querySelectorAll('.st').forEach(function(s){s.classList.toggle('on',+s.dataset.s===n)})}
-function chime(){
-  try{
-    ctx=ctx||new(window.AudioContext||window.webkitAudioContext)();
-    [784,659,523].forEach(function(f,i){
-      var o=ctx.createOscillator(),g=ctx.createGain(),t=ctx.currentTime+i*.28;
-      o.type='sine';o.frequency.value=f;o.connect(g);g.connect(ctx.destination);
-      g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.16,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.7);
-      o.start(t);o.stop(t+.75);
+// --- ตั้งค่าการเชื่อมต่อ HiveMQ Cloud ผ่าน WebSocket ---
+const MQTT_HOST = "wss://61286afe29624375903af5c7efec2060.s1.eu.hivemq.cloud:8884/mqtt";
+const MQTT_OPTIONS = {
+    clientId: "web_client_" + Math.random().toString(16).substring(2, 8),
+    username: "esp32_door",
+    password: "esp32_door",
+    clean: true,
+};
+
+console.log("Connecting to HiveMQ Cloud via WebSocket...");
+const client = mqtt.connect(MQTT_HOST, MQTT_OPTIONS);
+
+client.on("connect", () => {
+    console.log("Connected to HiveMQ Cloud successfully!");
+    client.subscribe("smart_home/door/status", (err) => {
+        if (!err) {
+            console.log("Subscribed to smart_home/door/status");
+        }
     });
-  }catch(e){}
-  tile('tSnd','Playing…',true);setTimeout(function(){tile('tSnd','Silent')},1200);
+});
+
+client.on("message", (topic, payload) => {
+    if (topic === "smart_home/door/status") {
+        try {
+            const data = JSON.parse(payload.toString());
+            
+            if (data.count !== undefined) {
+                count = data.count;
+                $('cnt').textContent = count;
+            }
+
+            if (data.ldr !== undefined) {
+                setLdr(data.ldr, true);
+            }
+
+            if (data.event === "OPEN") {
+                if (!busy) {
+                    busy = true;
+                    setLook();
+                    resetPeople();
+                    void P.offsetWidth;
+                    P.className = 'ppl go pA'; 
+                    
+                    later(() => {
+                        door(true);
+                        led(isNight());
+                        oled('Welcome!', `Cust #${count}`);
+                        const f = $('fill');
+                        f.style.transition = 'none';
+                        f.style.width = '100%';
+                        void f.offsetWidth;
+                        f.style.transition = `width ${HOLD}ms linear`;
+                        f.style.width = '0%';
+                    }, 1300);
+
+                    later(() => { P.className = 'ppl go turn pB'; }, 2400);
+                    later(() => { P.className = 'ppl'; I.className = 'ppl go turn in'; }, 3100);
+                    later(() => { I.classList.add('fade'); }, 6000);
+
+                    later(() => {
+                        busy = false;
+                    }, HOLD + 2000);
+                }
+                log(`📥 [Wokwi] ตรวจพบคน! ลูกค้าคนที่ #${count}`);
+            } 
+            else if (data.event === "CLOSED") {
+                door(false);
+                led(false);
+                oled('Thank You', `Total: ${count}`);
+                resetPeople();
+                log(`📥 [Wokwi] ปิดประตูเรียบร้อย`);
+            }
+        } catch (e) {
+            console.error("JSON Parse Error:", e);
+        }
+    }
+});
+
+function setMode(m) {
+    mode = m;
+    $('mode-badge').textContent = 'MODE: ' + m;
+    ['AUTO', 'HOLD_OPEN', 'LOCKED'].forEach(x => $('b-' + x).classList.toggle('sel', x===m));
+    
+    if (client.connected) {
+        client.publish("smart_home/door/cmd", m);
+        log(`📤 [Web] ส่งคำสั่งโหมด: ${m}`);
+    } else {
+        log(`⚠️ MQTT ยังไม่เชื่อมต่อ`);
+    }
+
+    if (m === 'AUTO') { door(false); led(false); oled('Smart Door', 'Standby...'); }
+    if (m === 'HOLD_OPEN') { door(true); led(true); oled('Hold Open', 'Door Unlocked'); }
+    if (m === 'LOCKED') { door(false); led(false); oled('Door Locked', 'System Secured'); }
 }
-function swing(from,to,cb){
-  var t0=performance.now();
-  (function f(t){
-    var p=Math.min((t-t0)/MOVE,1),e=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2,a=from+(to-from)*e;
-    $('door').style.setProperty('--a',a);
-    tile('tDoor',(a>1?'OPEN':'CLOSED')+' · '+Math.round(a)+'°',a>1);
-    p<1?requestAnimationFrame(f):cb&&cb();
-  })(t0);
+
+const $=id=>document.getElementById(id), log_=$('log'), HOLD=4000;
+let count=0, mode='AUTO', busy=false, ldr=500, cycle=null, timers=[];
+
+function log(m){
+    const d=document.createElement('div');
+    d.innerHTML=`<span class="text-slate-500">[${new Date().toLocaleTimeString('th-TH')}]</span> ${m}`;
+    log_.prepend(d);
+    while(log_.children.length>30) log_.lastChild.remove();
 }
-function trigger(){
-  if(busy)return;busy=true;
-  var st=$('stage');st.classList.add('busy','lit','opened');
-  step(2);tile('tPir','Motion!',true);tile('tLed','ON',true);
-  chime();oled('Welcome!','Please come in');
-  log('PIR ทริก → เล่นเสียงต้อนรับ + LED ติด + ประตูเริ่มเปิด');
-  swing(0,90,function(){
-    log('ประตูเปิดสุด 90° → เปิดค้าง 4 วินาที');
-    var f=$('fill');f.style.transition='none';f.style.width='100%';void f.offsetWidth;f.style.transition='width '+HOLD+'ms linear';f.style.width='0%';
-    tile('tPir','Idle');
-    setTimeout(function(){
-      step(3);st.classList.remove('opened');oled('Thank You','See you again');
-      log('ครบเวลา → ประตูเริ่มปิดกลับ 0° · OLED: Thank You');
-      swing(90,0,function(){
-        setTimeout(function(){
-          st.classList.remove('lit','busy');tile('tLed','OFF');step(1);
-          oled('Smart Door','Standby...');busy=false;
-          log('LED ดับ · รีเซ็ตกลับสู่ Standby รอการทริกครั้งถัดไป');
-        },1500);
-      });
-    },HOLD);
-  });
+
+function oled(a,b){
+    $('oled').innerHTML=`<div class="m text-2xl font-bold tracking-wider">${a}</div><div class="s text-lg mt-1">${b}</div>`;
 }
-$('pir').addEventListener('click',trigger);
-$('sw').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;document.body.dataset.v=b.dataset.v;this.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b)})});
-log('ระบบพร้อม · สถานะ Standby');
+
+const isNight=()=>ldr>2000;
+const door=(o)=>{$('scene').classList.toggle('opened',o)};
+const led=(o)=>$('led').classList.toggle('on',o);
+
+// ฟังก์ชันเมื่อเลื่อนสไลเดอร์บนเว็บ (ซ้าย = มืด 0%, ขวา = สว่าง 100%)
+function onSliderInput(sliderVal){
+  const val = parseInt(sliderVal);
+  const ldrVal = 4095 - val;
+  
+  if (client.connected) {
+      client.publish("smart_home/door/ldr_cmd", ldrVal.toString());
+  }
+  setLdr(ldrVal, true);
+}
+
+function setLdr(v, fromServer){
+  const wasNight=$('scene').classList.contains('night');
+  if(!fromServer && cycle) toggleCycle();
+  ldr = parseInt(v);
+
+  const sliderVal = 4095 - ldr;
+  $('slider').value = sliderVal;
+
+  const percent = Math.max(0, Math.min(100, Math.round(((4095 - ldr) / 4095) * 100)));
+  $('ldr').textContent = percent + '%';
+
+  const n = isNight();
+  $('ldr-label').textContent = `แสงสว่าง: ${percent}% (${n ? '🌙 มืด' : '☀️ สว่าง'})`;
+  $('scene').classList.toggle('night', n);$('dn-badge').textContent = n ? '🌙 กลางคืน' : '☀️ กลางวัน';
+  $('b-day').classList.toggle('sel', !n);$('b-night').classList.toggle('sel', n);
+  
+  if(n !== wasNight){
+    log(n ? '🌙 เข้าสู่โหมดกลางคืน' : '☀️ เข้าสู่โหมดกลางวัน');
+    if($('scene').classList.contains('opened')) led(n || mode==='HOLD_OPEN');
+  }
+}
+
+function toggleCycle(){
+  if(cycle){clearInterval(cycle); cycle=null; $('b-cycle').classList.remove('sel'); log('⏹ หยุดการวนกลางวัน/กลางคืน'); return}
+  $('b-cycle').classList.add('sel'); log('🔄 เริ่มวนกลางวัน/กลางคืนอัตโนมัติ');
+  let t = ldr<2000 ? 0 : Math.PI;
+  cycle = setInterval(()=>{ t+=0.03; setLdr(Math.round(2047+Math.sin(t-Math.PI/2)*2047), true) }, 100);
+}
+
+const later=(f,ms)=>timers.push(setTimeout(f,ms));
+const clearTimers=()=>timers.forEach(clearTimeout);
+
+const P=$('person'), I=$('insider');
+const looks=[
+  {shirt:'#f8fafc',shirtd:'#cbd5e1',pants:'#1e293b',pantsd:'#0f172a',hair:'#111827',skin:'#f1c9a5'},
+  {shirt:'#ffffff',shirtd:'#e2e8f0',pants:'#1d4ed8',pantsd:'#1e40af',hair:'#1f2937',skin:'#e0ac82'},
+  {shirt:'#f97316',shirtd:'#c2410c',pants:'#374151',pantsd:'#1f2937',hair:'#111827',skin:'#c68a5e'},
+  {shirt:'#a855f7',shirtd:'#7e22ce',pants:'#475569',pantsd:'#334155',hair:'#0f172a',skin:'#f1c9a5'},
+  {shirt:'#facc15',shirtd:'#ca8a04',pants:'#111827',pantsd:'#030712',hair:'#1f2937',skin:'#d9a273'},
+  {shirt:'#0ea5e9',shirtd:'#0369a1',pants:'#334155',pantsd:'#1e293b',hair:'#78350f',skin:'#e0ac82'},
+  {shirt:'#d4b28c',shirtd:'#bc8a5f',pants:'#654321',pantsd:'#4a3319',hair:'#3d2314',skin:'#f1c9a5'},
+  {shirt:'#334155',shirtd:'#1e293b',pants:'#0f172a',pantsd:'#020617',hair:'#000000',skin:'#e0ac82'},
+  {shirt:'#ffffff',shirtd:'#cbd5e1',pants:'#0f172a',pantsd:'#020617',hair:'#451a03',skin:'#f1c9a5'},
+  {shirt:'#15803d',shirtd:'#166534',pants:'#1e293b',pantsd:'#0f172a',hair:'#111827',skin:'#e0ac82'},
+  {shirt:'#dc2626',shirtd:'#b91c1c',pants:'#1f2937',pantsd:'#111827',hair:'#78350f',skin:'#c68a5e'},
+  {shirt:'#f472b6',shirtd:'#db2777',pants:'#4b5563',pantsd:'#374151',hair:'#111827',skin:'#f1c9a5'}
+];
+
+const pSvg=`<svg viewBox="0 0 60 130">
+<ellipse cx="30" cy="127" rx="17" ry="3.5" fill="rgba(0,0,0,.28)"/>
+<g class="side">
+<g class="armB"><rect x="27" y="40" width="7" height="30" rx="3.5" fill="var(--shirtd)"/><circle cx="30.5" cy="71" r="3.6" fill="var(--skin)"/></g>
+<g class="legB"><rect x="26" y="66" width="10" height="52" rx="4" fill="var(--pantsd)"/><path d="M25 116h17a3 3 0 0 1 0 8H25z" fill="#1f2937"/></g>
+<g class="legF"><rect x="26" y="66" width="11" height="52" rx="4" fill="var(--pants)"/><path d="M25 116h18a3 3 0 0 1 0 8H25z" fill="#111827"/></g>
+<rect x="22" y="36" width="20" height="36" rx="8" fill="var(--shirt)"/>
+<g class="armF"><rect x="27" y="40" width="7" height="30" rx="3.5" fill="var(--shirt)"/><circle cx="30.5" cy="71" r="3.6" fill="var(--skin)"/></g>
+<rect x="27" y="28" width="7" height="9" rx="3" fill="var(--skin)"/><circle cx="31" cy="20" r="10" fill="var(--skin)"/>
+<path d="M21 19c-1-9 6-13 12-12 6 1 9 6 8 11-3-4-8-5-12-4-3 1-6 3-8 5z" fill="var(--hair)"/><circle cx="37" cy="21" r="1.3" fill="#1f2937"/>
+</g>
+<g class="back">
+<g class="bArmL"><rect x="11" y="40" width="7" height="30" rx="3.5" fill="var(--shirtd)"/><circle cx="14.5" cy="71" r="3.6" fill="var(--skin)"/></g>
+<g class="bArmR"><rect x="42" y="40" width="7" height="30" rx="3.5" fill="var(--shirtd)"/><circle cx="45.5" cy="71" r="3.6" fill="var(--skin)"/></g>
+<g class="bLegL"><rect x="19" y="66" width="11" height="52" rx="4" fill="var(--pants)"/><rect x="18" y="116" width="13" height="8" rx="3" fill="#111827"/></g>
+<g class="bLegR"><rect x="30" y="66" width="11" height="52" rx="4" fill="var(--pantsd)"/><rect x="29" y="116" width="13" height="8" rx="3" fill="#111827"/></g>
+<rect x="15" y="36" width="30" height="36" rx="10" fill="var(--shirt)"/><rect x="26" y="28" width="8" height="9" rx="3" fill="var(--skin)"/>
+<circle cx="30" cy="19" r="10.5" fill="var(--hair)"/>
+</g></svg>`;
+
+P.innerHTML=I.innerHTML=pSvg;
+let lk=0;
+function setLook(){const l=looks[lk++%looks.length];[P,I].forEach(e=>Object.entries(l).forEach(([k,v])=>e.style.setProperty('--'+k,v)))}
+function resetPeople(){P.className='ppl';I.className='ppl'}
+
+function triggerMotion(){
+  if(mode!=='AUTO'){log(`⚠️ อยู่ในโหมด ${mode} ไม่เปิดอัตโนมัติ`);return}
+  if(client.connected){
+      client.publish("smart_home/door/cmd", "TRIGGER");
+      log(`📤 [Web] ส่งคำสั่งจำลองคนเดินผ่านไปยัง Wokwi`);
+  } else {
+      log(`⚠️ MQTT ยังไม่เชื่อมต่อ`);
+  }
+}
+
+setMode('AUTO');
+setLdr(500);
+log('[System] พร้อมเชื่อมต่อ Wokwi ผ่าน HiveMQ เรียบร้อยแล้ว');
