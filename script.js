@@ -153,7 +153,9 @@ const led=(o)=>$('led').classList.toggle('on',o);
 
 // ฟังก์ชันเมื่อเลื่อนสไลเดอร์บนเว็บ (ซ้าย = มืด 0%, ขวา = สว่าง 100%)
 function onSliderInput(sliderVal){
-  const val = parseInt(sliderVal);
+  let val = parseInt(sliderVal);
+  if (isNaN(val)) return;
+  val = Math.max(0, Math.min(4095, val));
   const ldrVal = 4095 - val;
   
   if (client.connected) {
@@ -165,7 +167,9 @@ function onSliderInput(sliderVal){
 function setLdr(v, fromServer){
   const wasNight=$('scene').classList.contains('night');
   if(!fromServer && cycle) toggleCycle();
-  ldr = parseInt(v);
+  const num = parseInt(v);
+  if(isNaN(num)) return;
+  ldr = Math.max(0, Math.min(4095, num));   // จำกัดช่วง 0-4095
 
   const sliderVal = 4095 - ldr;
   $('slider').value = sliderVal;
@@ -182,6 +186,13 @@ function setLdr(v, fromServer){
     log(n ? '🌙 เข้าสู่โหมดกลางคืน' : '☀️ เข้าสู่โหมดกลางวัน');
     if($('scene').classList.contains('opened')) led(n || mode==='HOLD_OPEN');
   }
+}
+
+// ทดสอบ NFR-01: สั่งให้ ESP32 ตัดเน็ต 20 วินาที (ประตูต้องยังทำงานในพื้นที่ แล้วเชื่อมต่อกลับเอง)
+function netCut(){
+  if(!client.connected){ log('⚠️ MQTT ยังไม่เชื่อมต่อ'); return }
+  client.publish("smart_home/door/cmd","NET_OFF:20");
+  log('📤 [Web] สั่งทดสอบตัดเน็ต ESP32 20 วินาที — กด PIR ใน Wokwi เพื่อดูว่าประตูยังเปิดได้');
 }
 
 function toggleCycle(){
@@ -263,12 +274,3 @@ setInterval(()=>{
     log('⚠️ ไม่ได้รับสัญญาณจาก ESP32 เกิน 8 วินาที');
   }
 },1000);
-
-// ใช้โลโก้จริงถ้ามีไฟล์ assets/logo.png (ไม่มีก็ใช้โลโก้วาดด้วย CSS ต่อไป)
-(function(){
-  const src='assets/logo.png', probe=new Image();
-  probe.onload=()=>document.querySelectorAll('.logo-slot').forEach(el=>{
-    el.innerHTML=`<img src="${src}" alt="7-Eleven">`; el.classList.add('has-img');
-  });
-  probe.src=src;
-})();
