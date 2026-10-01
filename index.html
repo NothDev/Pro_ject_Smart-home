@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Smart 7-11 Door Simulator</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27><text y=%27.9em%27 font-size=%2790%27>🏪</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -12,9 +13,9 @@
 <body class="min-h-screen p-4 md:p-6">
 <div class="max-w-7xl mx-auto space-y-6">
 
-<header class="flex flex-col md:flex-row justify-between items-center gap-3 bg-[#131b2e] p-5 rounded-2xl border border-slate-800">
+<header class="hdr relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-3 bg-[#131b2e] p-5 rounded-2xl border border-slate-800">
   <div class="flex items-center gap-4">
-    <div class="w-16 h-16 bg-white rounded-xl flex flex-col items-center justify-center border-2 border-green-700 leading-none">
+    <div class="logo-slot w-16 h-16 bg-white rounded-xl flex flex-col items-center justify-center border-2 border-green-700 leading-none">
       <b class="text-red-600 text-3xl italic">7</b><span class="text-green-700 text-[9px] font-black tracking-wider">ELEVEN</span>
     </div>
     <div>
@@ -22,9 +23,7 @@
       <p class="text-xs text-slate-400">จำลองประตูอัตโนมัติหน้าร้านสะดวกซื้อ พร้อมโหมดกลางวัน/กลางคืน</p>
     </div>
   </div>
-  <div class="px-4 py-2 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-2">
-    <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>พร้อมทดสอบระบบ
-  </div>
+  <div id="conn-badge" class="conn amber"><span class="dot"></span><span id="conn-text">กำลังเชื่อมต่อ…</span></div>
 </header>
 
 <div class="grid grid-cols-1 xl:grid-cols-4 gap-6">
@@ -49,7 +48,7 @@
           <div class="sb"><i class="o"></i><i class="g"></i><i class="r"></i></div>
           <div class="sb"><i class="o"></i><i class="g"></i><i class="r"></i></div>
           <div class="sb"><i class="o"></i><i class="g"></i><i class="r"></i></div>
-          <div class="logo"><b>7</b><span>ELEVEN</span></div>
+          <div class="logo logo-slot"><b>7</b><span>ELEVEN</span></div>
           <div class="sb"><i class="o"></i><i class="g"></i><i class="r"></i></div>
           <div class="sb"><i class="o"></i><i class="g"></i><i class="r"></i></div>
           <div class="sb"><i class="o"></i><i class="g"></i><i class="r"></i></div>
@@ -125,7 +124,7 @@
       <div id="fill" class="bg-amber-400 h-full w-0 shadow-[0_0_8px_#fbbf24]"></div>
     </div>
     <div class="mt-5 text-center">
-      <button onclick="triggerMotion()" class="py-3.5 px-8 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-2xl shadow-lg active:scale-95 transition">
+      <button onclick="triggerMotion()" class="cta">
         🚶 จำลองคนเดินผ่านเซนเซอร์ (PIR Trigger)
       </button>
     </div>
@@ -134,9 +133,9 @@
   <div class="card p-5">
     <h2 class="text-base font-semibold mb-4">🎛️ โหมดการทำงานของประตู</h2>
     <div class="grid grid-cols-3 gap-3">
-      <button id="b-AUTO" onclick="setMode('AUTO')" class="btn bg-emerald-700 hover:bg-emerald-600 text-emerald-50 border-emerald-500">🟢 AUTO</button>
-      <button id="b-HOLD_OPEN" onclick="setMode('HOLD_OPEN')" class="btn bg-amber-700 hover:bg-amber-600 text-amber-50 border-amber-500">🔓 HOLD OPEN</button>
-      <button id="b-LOCKED" onclick="setMode('LOCKED')" class="btn bg-rose-800 hover:bg-rose-700 text-rose-50 border-rose-600">🔒 LOCKED</button>
+      <button id="b-AUTO" onclick="setMode('AUTO')" class="btn bg-emerald-700 hover:bg-emerald-600 text-emerald-50 border-emerald-500"><span>🟢 AUTO</span><small>เปิดเมื่อมีคนเดินผ่าน</small></button>
+      <button id="b-HOLD_OPEN" onclick="setMode('HOLD_OPEN')" class="btn bg-amber-700 hover:bg-amber-600 text-amber-50 border-amber-500"><span>🔓 HOLD OPEN</span><small>เปิดค้างไว้</small></button>
+      <button id="b-LOCKED" onclick="setMode('LOCKED')" class="btn bg-rose-800 hover:bg-rose-700 text-rose-50 border-rose-600"><span>🔒 LOCKED</span><small>ล็อกประตู</small></button>
     </div>
   </div>
 </div>
@@ -148,8 +147,8 @@
   </div>
 
   <div class="grid grid-cols-2 gap-4">
-    <div class="card p-4 text-center"><div class="text-[11px] text-slate-400">ลูกค้าวันนี้</div><div id="cnt" class="text-4xl font-bold text-amber-400">0</div></div>
-    <div class="card p-4 text-center"><div class="text-[11px] text-slate-400">ความสว่าง (%)</div><div id="ldr" class="text-4xl font-bold text-sky-400">0%</div></div>
+    <div class="card p-4 text-center"><div class="text-[11px] text-slate-400">👥 ลูกค้าวันนี้</div><div id="cnt" class="text-4xl font-bold text-amber-400">0</div></div>
+    <div class="card p-4 text-center"><div class="text-[11px] text-slate-400">💡 ความสว่าง (%)</div><div id="ldr" class="text-4xl font-bold text-sky-400">0%</div></div>
   </div>
 
   <div class="card p-5 space-y-3">
@@ -171,6 +170,7 @@
 </div>
 </div>
 
+<footer class="text-center text-[11px] text-slate-500 pb-6 pt-2">Smart Door Mini Project · ESP32 + MicroPython · Wokwi · HiveMQ Cloud (MQTT)</footer>
 <script src="script.js"></script>
 </body>
 </html>

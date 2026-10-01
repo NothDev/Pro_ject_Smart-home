@@ -12,6 +12,8 @@ const client = mqtt.connect(MQTT_HOST, MQTT_OPTIONS);
 
 client.on("connect", () => {
     console.log("Connected to HiveMQ Cloud successfully!");
+    setConn('cloud');
+    log('☁️ เชื่อมต่อ HiveMQ Cloud สำเร็จ');
     client.subscribe("smart_home/door/status", (err) => {
         if (!err) {
             console.log("Subscribed to smart_home/door/status");
@@ -19,73 +21,91 @@ client.on("connect", () => {
     });
 });
 
+client.on("reconnect", () => setConn('connecting'));
+client.on("close", () => setConn('down'));
+client.on("offline", () => setConn('down'));
+client.on("error", (e) => console.error("MQTT error:", e));
+
 client.on("message", (topic, payload) => {
-    if (topic === "smart_home/door/status") {
-        try {
-            const data = JSON.parse(payload.toString());
-            
-            if (data.count !== undefined) {
-                count = data.count;
-                $('cnt').textContent = count;
-            }
+    if (topic !== "smart_home/door/status") return;
 
-            if (data.ldr !== undefined) {
-                setLdr(data.ldr, true);
-            }
+    let data;
+    try { data = JSON.parse(payload.toString()); }
+    catch (e) { console.error("JSON Parse Error:", e); return; }
 
-            if (data.event === "OPEN") {
-                if (!busy) {
-                    busy = true;
-                    setLook();
-                    resetPeople();
-                    void P.offsetWidth;
-                    P.className = 'ppl go pA'; 
-                    
-                    later(() => {
-                        door(true);
-                        led(isNight());
-                        oled('Welcome!', `Cust #${count}`);
-                        const f = $('fill');
-                        f.style.transition = 'none';
-                        f.style.width = '100%';
-                        void f.offsetWidth;
-                        f.style.transition = `width ${HOLD}ms linear`;
-                        f.style.width = '0%';
-                    }, 1300);
+    lastSeen = Date.now();
 
-                    later(() => { P.className = 'ppl go turn pB'; }, 2400);
-                    later(() => { P.className = 'ppl'; I.className = 'ppl go turn in'; }, 3100);
-                    later(() => { I.classList.add('fade'); }, 6000);
+    // ESP32 หลุด (Last Will ของ MQTT)
+    if (data.event === "OFFLINE") {
+        setConn('offline');
+        log('⚠️ [Wokwi] ESP32 ออฟไลน์ (ขาดการเชื่อมต่อ)');
+        return;
+    }
+    if (data.event === "ONLINE" && connState !== 'online') log('📥 [Wokwi] ESP32 ออนไลน์');
+    setConn('online');
 
-                    later(() => {
-                        busy = false;
-                    }, HOLD + 2000);
-                }
-                log(`📥 [Wokwi] ตรวจพบคน! ลูกค้าคนที่ #${count}`);
-            } 
-            else if (data.event === "CLOSED") {
-                door(false);
-                led(false);
-                oled('Thank You', `Total: ${count}`);
-                resetPeople();
-                log(`📥 [Wokwi] ปิดประตูเรียบร้อย`);
-            }
-        } catch (e) {
-            console.error("JSON Parse Error:", e);
+    if (data.count !== undefined) { count = data.count; $('cnt').textContent = count; }
+    if (data.ldr !== undefined && !cycle) setLdr(data.ldr, true);
+    if (data.hold_ms) HOLD = data.hold_ms;                       // เวลาถือประตูเปิดจาก ESP32 (แหล่งเดียว)
+    if (data.mode && data.mode !== mode && Date.now() - lastModeSet > 3000) {
+        setMode(data.mode, true);                                // ซิงก์โหมดจริงของ ESP32 (ไม่ส่งกลับ)
+    }
+
+    if (data.event === "OPEN") {
+        openedAt = Date.now();
+        pendingClose.forEach(clearTimeout); pendingClose = [];
+        if (!busy) {
+            busy = true;
+            setLook();
+            resetPeople();
+            void P.offsetWidth;
+            P.className = 'ppl go pA';
+
+            later(() => {
+                door(true);
+                led(isNight());
+                oled('Welcome!', `Cust #${count}`);
+                const f = $('fill');
+                f.style.transition = 'none';
+                f.style.width = '100%';
+                void f.offsetWidth;
+                f.style.transition = `width ${HOLD}ms linear`;
+                f.style.width = '0%';
+            }, 1300);
+
+            later(() => { P.className = 'ppl go turn pB'; }, 2400);
+            later(() => { P.className = 'ppl'; I.className = 'ppl go turn in'; }, 3100);
+            later(() => { I.classList.add('fade'); }, 6000);
+            later(() => { busy = false; }, MIN_OPEN_VISIBLE + 800);
         }
+        log(`📥 [Wokwi] ตรวจพบคน! ลูกค้าคนที่ #${count}`);
+    }
+    else if (data.event === "CLOSED") {
+        // ESP32 ปิดประตูที่ ~3 วิ แต่แอนิเมชันคนเดินเข้าใช้เวลานานกว่า → รอให้คนเดินผ่านก่อนค่อยปิดบนเว็บ
+        const wait = Math.max(0, openedAt + MIN_OPEN_VISIBLE - Date.now());
+        pendingClose.push(setTimeout(() => {
+            if (mode !== 'AUTO') return;
+            door(false);
+            led(false);
+            oled('Thank You', `Total: ${count}`);
+            log('📥 [Wokwi] ปิดประตูเรียบร้อย');
+        }, wait));
     }
 });
 
-function setMode(m) {
+function setMode(m, silent) {
     mode = m;
+    if (!silent) lastModeSet = Date.now();
     $('mode-badge').textContent = 'MODE: ' + m;
     ['AUTO', 'HOLD_OPEN', 'LOCKED'].forEach(x => $('b-' + x).classList.toggle('sel', x===m));
     
-    if (client.connected) {
-        client.publish("smart_home/door/cmd", m);
-        log(`📤 [Web] ส่งคำสั่งโหมด: ${m}`);
-    } else {
-        log(`⚠️ MQTT ยังไม่เชื่อมต่อ`);
+    if (!silent) {
+        if (client.connected) {
+            client.publish("smart_home/door/cmd", m);
+            log(`📤 [Web] ส่งคำสั่งโหมด: ${m}`);
+        } else {
+            log(`⚠️ MQTT ยังไม่เชื่อมต่อ`);
+        }
     }
 
     if (m === 'AUTO') { door(false); led(false); oled('Smart Door', 'Standby...'); }
@@ -93,11 +113,31 @@ function setMode(m) {
     if (m === 'LOCKED') { door(false); led(false); oled('Door Locked', 'System Secured'); }
 }
 
-const $=id=>document.getElementById(id), log_=$('log'), HOLD=4000;
+const $=id=>document.getElementById(id), log_=$('log');
+let HOLD=3000;                     // ซิงก์กับ OPEN_MS ใน main.py (ESP32 ส่ง hold_ms มาทับให้)
+const MIN_OPEN_VISIBLE=4200;       // เวลาขั้นต่ำที่ประตูเปิดบนเว็บ ให้แอนิเมชันคนเดินเข้าเล่นจบ
 let count=0, mode='AUTO', busy=false, ldr=500, cycle=null, timers=[];
+let openedAt=0, pendingClose=[], lastSeen=0, lastModeSet=0, connState='';
+
+// ----- สถานะการเชื่อมต่อ (ป้ายมุมขวาบน) -----
+const CONN={
+  connecting:['กำลังเชื่อมต่อ HiveMQ…','amber'],
+  cloud:['เชื่อม Cloud แล้ว · รอ ESP32','sky'],
+  online:['ESP32 ออนไลน์','emerald'],
+  offline:['ESP32 ออฟไลน์','rose'],
+  down:['หลุดการเชื่อมต่อ MQTT','rose']
+};
+function setConn(st){
+  if(st===connState) return;
+  connState=st;
+  const [t,c]=CONN[st];
+  $('conn-badge').className='conn '+c;
+  $('conn-text').textContent=t;
+}
 
 function log(m){
     const d=document.createElement('div');
+    d.className = m.includes('⚠️') ? 'lg-w' : m.includes('📤') ? 'lg-out' : m.includes('📥') ? 'lg-in' : '';
     d.innerHTML=`<span class="text-slate-500">[${new Date().toLocaleTimeString('th-TH')}]</span> ${m}`;
     log_.prepend(d);
     while(log_.children.length>30) log_.lastChild.remove();
@@ -148,7 +188,13 @@ function toggleCycle(){
   if(cycle){clearInterval(cycle); cycle=null; $('b-cycle').classList.remove('sel'); log('⏹ หยุดการวนกลางวัน/กลางคืน'); return}
   $('b-cycle').classList.add('sel'); log('🔄 เริ่มวนกลางวัน/กลางคืนอัตโนมัติ');
   let t = ldr<2000 ? 0 : Math.PI;
-  cycle = setInterval(()=>{ t+=0.03; setLdr(Math.round(2047+Math.sin(t-Math.PI/2)*2047), true) }, 100);
+  let tick=0;
+  cycle = setInterval(()=>{
+    t+=0.03;
+    const v=Math.round(2047+Math.sin(t-Math.PI/2)*2047);
+    setLdr(v, true);
+    if(client.connected && ++tick%10===0) client.publish("smart_home/door/ldr_cmd", String(v)); // ส่งให้ ESP32 วินาทีละครั้ง
+  }, 100);
 }
 
 const later=(f,ms)=>timers.push(setTimeout(f,ms));
@@ -205,6 +251,24 @@ function triggerMotion(){
   }
 }
 
-setMode('AUTO');
-setLdr(500);
-log('[System] พร้อมเชื่อมต่อ Wokwi ผ่าน HiveMQ เรียบร้อยแล้ว');
+setMode('AUTO', true);
+setLdr(500, true);
+setConn('connecting');
+log('[System] กำลังเชื่อมต่อ HiveMQ Cloud...');
+
+// ถ้า ESP32 เงียบเกิน 8 วินาที (ปกติส่งทุก 2 วิ) ถือว่าออฟไลน์
+setInterval(()=>{
+  if(connState==='online' && Date.now()-lastSeen>8000){
+    setConn('offline');
+    log('⚠️ ไม่ได้รับสัญญาณจาก ESP32 เกิน 8 วินาที');
+  }
+},1000);
+
+// ใช้โลโก้จริงถ้ามีไฟล์ assets/logo.png (ไม่มีก็ใช้โลโก้วาดด้วย CSS ต่อไป)
+(function(){
+  const src='assets/logo.png', probe=new Image();
+  probe.onload=()=>document.querySelectorAll('.logo-slot').forEach(el=>{
+    el.innerHTML=`<img src="${src}" alt="7-Eleven">`; el.classList.add('has-img');
+  });
+  probe.src=src;
+})();
