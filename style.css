@@ -114,67 +114,11 @@ input[type=range]{accent-color:#38bdf8;width:100%}
 #log::-webkit-scrollbar{width:6px}#log::-webkit-scrollbar-thumb{background:#1e293b;border-radius:3px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition-duration:.01s!important}}
 
-/* ================= THEME v2 ================= */
-body{
-  background-color:#070b14;
-  background-image:
-    radial-gradient(60% 45% at 12% 0%,rgba(21,128,61,.20),transparent 70%),
-    radial-gradient(50% 40% at 92% 8%,rgba(249,115,22,.16),transparent 70%),
-    radial-gradient(45% 40% at 70% 100%,rgba(220,38,38,.12),transparent 70%),
-    radial-gradient(rgba(148,163,184,.10) 1px,transparent 1px);
-  background-size:auto,auto,auto,26px 26px;
-  background-attachment:fixed;
-}
-.hdr{background:linear-gradient(135deg,#16213a,#0f172a)!important;border:1px solid rgba(148,163,184,.14)!important;
-  box-shadow:0 18px 40px -18px rgba(0,0,0,.8)}
-.hdr::before{content:'';position:absolute;left:0;right:0;top:0;height:5px;
-  background:linear-gradient(90deg,#f97316 0 33.3%,#15803d 33.3% 66.6%,#dc2626 66.6%)}
-
-.card{background:linear-gradient(180deg,#16203a,#111a2d);border:1px solid rgba(148,163,184,.13);
-  box-shadow:0 14px 34px -16px rgba(0,0,0,.75),inset 0 1px 0 rgba(255,255,255,.04)}
-
-/* connection badge */
-.conn{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid;transition:.3s}
-.conn .dot{width:10px;height:10px;border-radius:50%;background:currentColor;animation:pulse 2s ease-in-out infinite}
-.conn.emerald{background:#052e22;color:#34d399;border-color:#065f46}
+/* ป้ายสถานะการเชื่อมต่อ (หน้าตาเดียวกับป้ายเดิม) */
+.conn{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid}
+.conn .dot{width:10px;height:10px;border-radius:50%;background:currentColor;animation:cpulse 2s ease-in-out infinite}
+.conn.emerald{background:#022c22;color:#34d399;border-color:#065f46}
 .conn.amber{background:#2a1c05;color:#fbbf24;border-color:#92400e}
-.conn.sky{background:#082a3d;color:#38bdf8;border-color:#075985}
-.conn.rose{background:#33101a;color:#fb7185;border-color:#9f1239}
-@keyframes pulse{50%{opacity:.35;transform:scale(.8)}}
-
-/* logo (ใส่ไฟล์ assets/logo.png เพื่อใช้โลโก้จริง) */
-.logo-slot img{width:100%;height:100%;object-fit:contain;display:block}
-.logo-slot.has-img{padding:3px;border-color:transparent!important}
-.logo.logo-slot.has-img{padding:2px}
-
-/* scene */
-.scene{border:1px solid rgba(148,163,184,.35);box-shadow:0 0 0 4px rgba(15,23,42,.9),0 24px 50px -20px rgba(0,0,0,.9);transition:box-shadow var(--t)}
-.scene.night{box-shadow:0 0 0 4px rgba(15,23,42,.9),0 24px 60px -18px rgba(99,102,241,.45)}
-.badge-dn{box-shadow:0 4px 14px rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.12)}
-
-/* buttons */
-.btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
-  box-shadow:0 6px 16px -8px rgba(0,0,0,.7);transition:transform .15s,box-shadow .2s,filter .2s}
-.btn:hover{transform:translateY(-2px);box-shadow:0 12px 22px -10px rgba(0,0,0,.8);filter:brightness(1.1)}
-.btn small{display:block;font-weight:400;font-size:10px;opacity:.75}
-.sel{outline:none!important;box-shadow:0 0 0 2px rgba(255,255,255,.9),0 0 24px rgba(255,255,255,.2)!important}
-.cta{padding:14px 32px;border-radius:16px;font-weight:700;color:#1c1100;cursor:pointer;
-  background:linear-gradient(135deg,#fbbf24,#f97316);box-shadow:0 10px 26px -8px rgba(249,115,22,.7);
-  transition:transform .15s,box-shadow .2s;animation:ctaGlow 2.8s ease-in-out infinite}
-.cta:hover{transform:translateY(-2px);box-shadow:0 16px 32px -8px rgba(249,115,22,.85)}
-.cta:active{transform:scale(.96)}
-@keyframes ctaGlow{50%{box-shadow:0 10px 38px -4px rgba(251,191,36,.75)}}
-
-/* OLED */
-.oled{background:#000 repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px);
-  border:8px solid #1e293b;box-shadow:inset 0 0 24px #000,0 10px 24px -12px rgba(0,0,0,.8)}
-
-#cnt,#ldr{text-shadow:0 0 18px currentColor;font-variant-numeric:tabular-nums}
-
-/* log */
-#log div{border-left:2px solid transparent;padding-left:6px}
-#log .lg-in{border-color:#34d399}
-#log .lg-out{border-color:#38bdf8}
-#log .lg-w{border-color:#fbbf24;color:#fde68a}
-
-input[type=range]{height:6px;cursor:pointer}
+.conn.sky{background:#082f49;color:#38bdf8;border-color:#075985}
+.conn.rose{background:#4c0519;color:#fb7185;border-color:#9f1239}
+@keyframes cpulse{50%{opacity:.4}}

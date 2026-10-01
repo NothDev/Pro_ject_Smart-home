@@ -26,23 +26,34 @@ last_source = "wokwi"
 last_physical_ldr = 0
 
 
+net_off_until = None    # ทดสอบตัดเน็ต: เวลาที่จะต่อกลับ (ticks)
+
+
 def sub_cb(topic, msg):
-    global mode, web_triggered, remote_ldr, last_source
-    if topic == b"smart_home/door/cmd":
-        cmd = msg.decode().strip()
-        if cmd in ("AUTO", "HOLD_OPEN", "LOCKED"):
-            mode = cmd
-            print("Mode ->", mode)
-        elif cmd == "TRIGGER":
-            web_triggered = True
-            print("TRIGGER from web")
-    elif topic == b"smart_home/door/ldr_cmd":
-        try:
-            remote_ldr = int(msg.decode().strip())
+    """รับคำสั่งจากเว็บ — ข้อมูลผิดรูปแบบ/นอกช่วงจะถูกละเลยหรือจำกัดค่า ไม่ทำให้ระบบล้ม"""
+    global mode, web_triggered, remote_ldr, last_source, net_off_until
+    try:
+        text = msg.decode().strip()
+        if topic == b"smart_home/door/cmd":
+            if text in ("AUTO", "HOLD_OPEN", "LOCKED"):
+                mode = text
+                print("Mode ->", mode)
+            elif text == "TRIGGER":
+                web_triggered = True
+                print("TRIGGER from web")
+            elif text.startswith("NET_OFF"):      # NET_OFF หรือ NET_OFF:30 (วินาที 5-120)
+                secs = int(text.split(":")[1]) if ":" in text else 20
+                secs = max(5, min(120, secs))
+                net_off_until = time.ticks_add(time.ticks_ms(), secs * 1000)
+                print("Network cut test for", secs, "s")
+            else:
+                print("Ignored cmd:", text)
+        elif topic == b"smart_home/door/ldr_cmd":
+            remote_ldr = max(0, min(4095, int(text)))   # จำกัดช่วง 0-4095
             last_source = "web"
             print("LDR from web:", remote_ldr)
-        except ValueError:
-            pass
+    except Exception as e:
+        print("Bad message ignored:", e)
 
 
 # --- 2. เชื่อมต่อ Wi-Fi + HiveMQ (ต่อใหม่อัตโนมัติถ้าหลุด) ---
@@ -154,6 +165,17 @@ print("Smart 7-11 Door started")
 
 while True:
     now = time.ticks_ms()
+
+    # ทดสอบตัดเน็ต (NFR-01): ตัดตามเวลาที่สั่ง แล้วต่อกลับเอง — ระหว่างนั้นประตูต้องยังทำงานปกติ
+    if net_off_until is not None:
+        if cloud.enabled:
+            cloud.go_offline()
+            print("NETWORK CUT (test)")
+        elif time.ticks_diff(now, net_off_until) >= 0:
+            net_off_until = None
+            cloud.go_online()
+            print("NETWORK RESTORED")
+
     cloud.loop()                       # รับคำสั่งจากเว็บ + reconnect
 
     # เลือกค่าแสง: อันที่เปลี่ยนล่าสุดชนะ (Wokwi vs เว็บ)
@@ -196,7 +218,7 @@ while True:
     if state == STATE_IDLE:
         brightness = 0 if active_ldr < 1000 else min(int(active_ldr / 5), 800)
         led.duty(brightness)
-        update_lcd("Smart Door", "Standby Cust:%d" % customer_count)
+        update_lcd("Smart Door", "Cust:%d%s" % (customer_count, "" if cloud.connected else " OFFLINE"))
 
         if pir.value() == 1 or web_triggered:
             web_triggered = False
