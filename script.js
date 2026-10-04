@@ -26,7 +26,7 @@ client.on("close", () => setConn('down'));
 client.on("offline", () => setConn('down'));
 client.on("error", (e) => console.error("MQTT error:", e));
 
-client.on("message", (topic, payload) => {
+client.on("message", (topic, payload, packet) => {
     if (topic !== "smart_home/door/status") return;
 
     let data;
@@ -38,11 +38,17 @@ client.on("message", (topic, payload) => {
     // ESP32 หลุด (Last Will ของ MQTT)
     if (data.event === "OFFLINE") {
         setConn('offline');
-        log('⚠️ [Wokwi] ESP32 ออฟไลน์ (ขาดการเชื่อมต่อ)');
+        if (data.off_secs && !(packet && packet.retain)) {      // ถูกสั่งทดสอบตัดเน็ต -> นับถอยหลัง
+            startOffCountdown(data.off_secs);
+            log(`⚠️ [Wokwi] ESP32 ถูกสั่งออฟไลน์ ${data.off_secs} วินาที (ทดสอบตัดเน็ต)`);
+        } else {
+            log('⚠️ [Wokwi] ESP32 ออฟไลน์ (ขาดการเชื่อมต่อ)');
+        }
         return;
     }
     if (data.event === "ONLINE" && connState !== 'online') log('📥 [Wokwi] ESP32 ออนไลน์');
     setConn('online');
+    stopOffCountdown();
 
     if (data.count !== undefined) { count = data.count; $('cnt').textContent = count; }
     if (data.ldr !== undefined && !cycle) setLdr(data.ldr, true);
@@ -109,7 +115,7 @@ function setMode(m, silent) {
     }
 
     if (m === 'AUTO') { door(false); led(false); oled('Smart Door', 'Standby...'); }
-    if (m === 'HOLD_OPEN') { door(true); led(true); oled('Hold Open', 'Door Unlocked'); }
+    if (m === 'HOLD_OPEN') { door(true); led(isNight()); oled('Hold Open', 'Door Unlocked'); }
     if (m === 'LOCKED') { door(false); led(false); oled('Door Locked', 'System Secured'); }
 }
 
@@ -118,6 +124,27 @@ let HOLD=3000;                     // ซิงก์กับ OPEN_MS ใน ma
 const MIN_OPEN_VISIBLE=4200;       // เวลาขั้นต่ำที่ประตูเปิดบนเว็บ ให้แอนิเมชันคนเดินเข้าเล่นจบ
 let count=0, mode='AUTO', busy=false, ldr=500, cycle=null, timers=[];
 let openedAt=0, pendingClose=[], lastSeen=0, lastModeSet=0, connState='';
+
+// ----- นับถอยหลังตอน ESP32 ถูกสั่งตัดเน็ต (NET_OFF) -----
+let offTimer=null, offEnd=0, offTotal=0;
+function startOffCountdown(secs){
+  stopOffCountdown();
+  offTotal=secs; offEnd=Date.now()+secs*1000;
+  $('off-banner').classList.remove('hidden');
+  $('off-text').textContent=`ESP32 ถูกสั่งให้ออฟไลน์ ${secs} วินาที (ทดสอบตัดเน็ต)`;
+  tickOff();
+  offTimer=setInterval(tickOff,200);
+}
+function tickOff(){
+  const ms=Math.max(0,offEnd-Date.now());
+  $('off-count').textContent=Math.ceil(ms/1000);
+  $('off-bar').style.width=(offTotal>0 ? ms/(offTotal*1000)*100 : 0)+'%';
+  if(ms===0) $('off-text').textContent='ครบเวลาแล้ว กำลังรอ ESP32 เชื่อมต่อกลับ...';
+}
+function stopOffCountdown(){
+  if(offTimer){ clearInterval(offTimer); offTimer=null; }
+  $('off-banner').classList.add('hidden');
+}
 
 // ----- สถานะการเชื่อมต่อ (ป้ายมุมขวาบน) -----
 const CONN={
@@ -133,6 +160,19 @@ function setConn(st){
   const [t,c]=CONN[st];
   $('conn-badge').className='conn '+c;
   $('conn-text').textContent=t;
+  applyConnUI();
+}
+// ปุ่มควบคุมใช้ได้เฉพาะตอน ESP32 ออนไลน์ (ตอนออฟไลน์คำสั่งจะหายและไม่ถึง ESP32)
+// และถ้าออฟไลน์/หลุด ฉากหน้าร้านจะเทาลงและมีป้าย "แสดงข้อมูลล่าสุด" เพราะไม่มีข้อมูลสดเข้ามา
+function applyConnUI(){
+  const live = connState==='online';
+  const stale = connState==='offline' || connState==='down';
+  document.querySelectorAll('[onclick^="setMode"],[onclick^="triggerMotion"],[onclick^="onSliderInput"],[onclick^="toggleCycle"],[onclick^="netCut"]')
+    .forEach(b => { b.disabled = !live; });
+  ['slider','net-secs'].forEach(id => { $(id).disabled = !live; });
+  $('scene').classList.toggle('stale', stale);
+  $('stale-note').classList.toggle('hidden', !stale);
+  if(stale && cycle) toggleCycle();
 }
 
 function log(m){
@@ -184,15 +224,23 @@ function setLdr(v, fromServer){
   
   if(n !== wasNight){
     log(n ? '🌙 เข้าสู่โหมดกลางคืน' : '☀️ เข้าสู่โหมดกลางวัน');
-    if($('scene').classList.contains('opened')) led(n || mode==='HOLD_OPEN');
+    if($('scene').classList.contains('opened')) led(n);
   }
 }
 
 // ทดสอบ NFR-01: สั่งให้ ESP32 ตัดเน็ต 20 วินาที (ประตูต้องยังทำงานในพื้นที่ แล้วเชื่อมต่อกลับเอง)
-function netCut(){
+function netCut(secs){
+  secs = Math.max(5, Math.min(120, parseInt(secs) || 20));       // ESP32 รองรับ 5-120 วินาที
   if(!client.connected){ log('⚠️ MQTT ยังไม่เชื่อมต่อ'); return }
-  client.publish("smart_home/door/cmd","NET_OFF:20");
-  log('📤 [Web] สั่งทดสอบตัดเน็ต ESP32 20 วินาที — กด PIR ใน Wokwi เพื่อดูว่าประตูยังเปิดได้');
+  client.publish("smart_home/door/cmd","NET_OFF:"+secs);
+  log(`📤 [Web] สั่งทดสอบตัดเน็ต ESP32 ${secs} วินาที — กด PIR ใน Wokwi เพื่อดูว่าประตูยังเปิดได้`);
+}
+function netCutCustom(){
+  const inp=$('net-secs'), raw=parseInt(inp.value);
+  if(isNaN(raw)){ log('⚠️ กรอกจำนวนวินาทีเป็นตัวเลข (5–120)'); return }
+  const secs=Math.max(5, Math.min(120, raw));
+  if(secs!==raw){ inp.value=secs; log(`⚠️ ปรับเวลาเป็น ${secs} วินาที (ช่วงที่รองรับ 5–120)`); }
+  netCut(secs);
 }
 
 function toggleCycle(){

@@ -23,6 +23,14 @@
   <div id="conn-badge" class="conn amber"><span class="dot"></span><span id="conn-text">กำลังเชื่อมต่อ…</span></div>
 </header>
 
+<div id="off-banner" class="hidden bg-[#2a0f18] border border-rose-800 rounded-2xl p-4">
+  <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+    <span id="off-text" class="text-sm text-rose-300"></span>
+    <span class="text-sm text-slate-300">กลับมาออนไลน์ใน <b id="off-count" class="font-mono text-2xl text-rose-400">0</b> วินาที</span>
+  </div>
+  <div class="mt-3 h-2 rounded-full bg-slate-900 overflow-hidden"><div id="off-bar" class="h-full bg-rose-500" style="width:100%"></div></div>
+</div>
+
 <div class="grid grid-cols-1 xl:grid-cols-4 gap-6">
 <div class="xl:col-span-3 space-y-6">
 
@@ -38,6 +46,7 @@
       <div class="cloud" style="top:40px;animation-delay:-10s"></div>
       <div class="cloud" style="top:85px;animation-delay:-30s;width:70px"></div>
       <div id="dn-badge" class="badge-dn">☀️ กลางวัน</div>
+      <div id="stale-note" class="badge-stale hidden">⚠️ ออฟไลน์ · แสดงข้อมูลล่าสุด</div>
 
       <div class="bldg">
         <div class="roof"></div>
@@ -134,7 +143,18 @@
       <button id="b-HOLD_OPEN" onclick="setMode('HOLD_OPEN')" class="btn bg-amber-700 hover:bg-amber-600 text-amber-50 border-amber-500">🔓 HOLD OPEN</button>
       <button id="b-LOCKED" onclick="setMode('LOCKED')" class="btn bg-rose-800 hover:bg-rose-700 text-rose-50 border-rose-600">🔒 LOCKED</button>
     </div>
-    <button onclick="netCut()" class="btn mt-3 w-full !py-2 !text-xs bg-slate-800 border-slate-600 text-slate-100">🔌 ทดสอบตัดเน็ต ESP32 (20 วินาที)</button>
+    <div class="mt-3 space-y-2">
+      <div class="text-xs text-slate-400">🔌 ทดสอบตัดเน็ต ESP32</div>
+      <div class="grid grid-cols-2 gap-2">
+        <button onclick="netCut(20)" class="btn !py-2 !text-xs bg-slate-800 border-slate-600 text-slate-100">20 วินาที</button>
+        <button onclick="netCut(60)" class="btn !py-2 !text-xs bg-slate-800 border-slate-600 text-slate-100">1 นาที</button>
+      </div>
+      <div class="flex gap-2">
+        <input id="net-secs" type="number" min="5" max="120" value="30" class="w-24 bg-slate-900 text-slate-100 border border-slate-600 rounded-xl px-3 py-2 text-xs">
+        <button onclick="netCutCustom()" class="btn !py-2 !text-xs flex-1 bg-slate-800 border-slate-600 text-slate-100">ตัดตามที่กรอก (วินาที)</button>
+      </div>
+      <p class="text-[10px] text-slate-500">กรอกได้ 5–120 วินาที</p>
+    </div>
   </div>
 </div>
 
@@ -171,3 +191,4 @@
 <script src="script.js"></script>
 </body>
 </html>
+
