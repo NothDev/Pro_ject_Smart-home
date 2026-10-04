@@ -27,11 +27,12 @@ last_physical_ldr = 0
 
 
 net_off_until = None    # ทดสอบตัดเน็ต: เวลาที่จะต่อกลับ (ticks)
+net_off_secs = None     # ทดสอบตัดเน็ต: จำนวนวินาทีที่ถูกสั่ง (ส่งให้เว็บนับถอยหลัง)
 
 
 def sub_cb(topic, msg):
     """รับคำสั่งจากเว็บ — ข้อมูลผิดรูปแบบ/นอกช่วงจะถูกละเลยหรือจำกัดค่า ไม่ทำให้ระบบล้ม"""
-    global mode, web_triggered, remote_ldr, last_source, net_off_until
+    global mode, web_triggered, remote_ldr, last_source, net_off_until, net_off_secs
     try:
         text = msg.decode().strip()
         if topic == b"smart_home/door/cmd":
@@ -41,9 +42,10 @@ def sub_cb(topic, msg):
             elif text == "TRIGGER":
                 web_triggered = True
                 print("TRIGGER from web")
-            elif text.startswith("NET_OFF"):      # NET_OFF หรือ NET_OFF:30 (วินาที 5-120)
+            elif text.startswith("NET_OFF"):          # NET_OFF หรือ NET_OFF:30 (วินาที 5-120)
                 secs = int(text.split(":")[1]) if ":" in text else 20
                 secs = max(5, min(120, secs))
+                net_off_secs = secs
                 net_off_until = time.ticks_add(time.ticks_ms(), secs * 1000)
                 print("Network cut test for", secs, "s")
             else:
@@ -61,12 +63,14 @@ cloud = Cloud(MQTT_SERVER, MQTT_USER, MQTT_PASSWORD, MQTT_CLIENT_ID,
               status_topic=TOPIC_STATUS,
               subscribe=[TOPIC_CMD, TOPIC_LDR],
               on_message=sub_cb)
+print("Booting... connecting WiFi")
 while True:
     try:
         cloud.wifi_connect()
         break
     except OSError as e:
         print("WiFi retry:", e)
+print("Connecting HiveMQ Cloud...")
 cloud.connect()
 
 
@@ -169,7 +173,7 @@ while True:
     # ทดสอบตัดเน็ต (NFR-01): ตัดตามเวลาที่สั่ง แล้วต่อกลับเอง — ระหว่างนั้นประตูต้องยังทำงานปกติ
     if net_off_until is not None:
         if cloud.enabled:
-            cloud.go_offline()
+            cloud.go_offline(net_off_secs)
             print("NETWORK CUT (test)")
         elif time.ticks_diff(now, net_off_until) >= 0:
             net_off_until = None
@@ -208,7 +212,7 @@ while True:
         continue
     if mode == "HOLD_OPEN":
         set_servo_angle(180)
-        led.duty(1023)
+        led.duty(1023 if active_ldr > NIGHT_LDR else 0)   # ไฟติดเฉพาะตอนกลางคืน
         update_lcd("Hold Open Mode", "Door Unlocked")
         web_triggered = False
         time.sleep(0.05)

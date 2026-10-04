@@ -17,7 +17,7 @@ except ImportError:
 class Cloud:
     def __init__(self, server, user, password, client_id,
                  status_topic, subscribe=(), on_message=None,
-                 port=8883, connect_timeout=6, retry_ms=5000):
+                 port=8883, connect_timeout=None, retry_ms=5000):
         self.server = server
         self.user = user
         self.password = password
@@ -69,13 +69,14 @@ class Cloud:
     def connect(self):
         """เชื่อมต่อ HiveMQ; คืน True/False (ไม่ throw) และมี timeout"""
         orig = _sock.socket
+        patched = self.connect_timeout is not None   # ค่าเริ่มต้น None = ไม่แตะ socket (ปลอดภัยกับ TLS)
 
-        def limited(*a, **k):          # ใส่ timeout ให้ socket ที่ umqtt สร้าง
-            s = orig(*a, **k)
-            s.settimeout(self.connect_timeout)
-            return s
-
-        _sock.socket = limited
+        if patched:
+            def limited(*a, **k):      # ใส่ timeout ให้ socket ที่ umqtt สร้าง
+                s = orig(*a, **k)
+                s.settimeout(self.connect_timeout)
+                return s
+            _sock.socket = limited
         try:
             c = MQTTClient(
                 client_id=self.client_id,
@@ -110,7 +111,8 @@ class Cloud:
             self.connected = False
             return False
         finally:
-            _sock.socket = orig
+            if patched:
+                _sock.socket = orig
 
     def ensure(self):
         """เรียกในลูปหลัก: ต่อใหม่เมื่อหลุด ทุก retry_ms โดยไม่ลองต่อ MQTT ถ้า Wi-Fi ยังไม่มา"""
@@ -155,13 +157,16 @@ class Cloud:
             return False
 
     # ---------- จำลองเครือข่ายขัดข้อง ----------
-    def go_offline(self):
+    def go_offline(self, secs=None):
         """แจ้ง OFFLINE แล้วตัด MQTT + Wi-Fi (ระบบควบคุมในพื้นที่ต้องยังทำงาน)"""
         if self.connected and self.client:
             try:
+                msg = {"event": "OFFLINE", "count": self.count}
+                if secs:
+                    msg["off_secs"] = secs      # ให้เว็บนับถอยหลังได้
                 self.client.publish(
                     self.status_topic,
-                    json.dumps({"event": "OFFLINE", "count": self.count}),
+                    json.dumps(msg),
                     retain=True)
             except Exception:
                 pass

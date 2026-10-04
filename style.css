@@ -122,3 +122,10 @@ input[type=range]{accent-color:#38bdf8;width:100%}
 .conn.sky{background:#082f49;color:#38bdf8;border-color:#075985}
 .conn.rose{background:#4c0519;color:#fb7185;border-color:#9f1239}
 @keyframes cpulse{50%{opacity:.4}}
+
+/* ESP32 ออฟไลน์: ฉากหน้าร้านเทาลง + ปิดปุ่มควบคุมที่ส่งคำสั่งไม่ถึง */
+.badge-stale{position:absolute;top:10px;right:12px;z-index:20;padding:3px 12px;border-radius:99px;font-size:12px;font-weight:600;background:rgba(127,29,29,.9);color:#fecaca}
+.scene.stale>*:not(.badge-stale){filter:grayscale(.9) brightness(.7)}
+.scene.stale .cloud{animation-play-state:paused}
+button:disabled,input:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}
+.btn:disabled:active{transform:none}
